@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CodeMirror Editor</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/codemirror.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/addon/hint/show-hint.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/mode/sql/sql.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.14/addon/hint/show-hint.min.js"></script>
+  <style>
+    body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+    }
+    #editor-container {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: 0;
+    }
+  </style>
+</head>
+<body>
+<div id="editor-container"></div>
+<script>
+  document.addEventListener('keydown', function(event) {
+    if (event.ctrlKey && event.keyCode === 13) {
+      // Llama a una función de Java (que configuraremos en el siguiente paso)
+      console.log("executeCode");
+      window.location = 'java:executeCode';
+    }
+    if (event.ctrlKey && event.key === 'o') { // Cambiado a event.key para detección más precisa
+      // Ejecuta un script Java en el navegador integrado
+      console.log("Opening file...");
+      window.location = 'java:openFile'; // Llama a la función openFile en Java
+    }
+    if (event.ctrlKey && event.key === 's') { // Cambiado a event.key para detección más precisa
+      // Ejecuta un script Java en el navegador integrado
+      console.log("Saving file...");
+      window.location = 'java:saveFile'; // Llama a la función openFile en Java
+    }
+    if (event.ctrlKey && event.key === 'n') { // Cambiado a event.key para detección más precisa
+      // Ejecuta un script Java en el navegador integrado
+      console.log("New file...");
+      window.location = 'java:newFile'; // Llama a la función openFile en Java
+    }
+  });
+
+  var tables = {};
+  // Lista básica de sugerencias para PL/SQL
+  var suggestions = [];
+
+  // Colección de snippets
+  var snippets = {  };
+
+  function injectTables(newTables) {
+    //removes all the elements from the array
+    tables = {};
+    for (var tableName in newTables) {
+      tables[tableName] = newTables[tableName];
+    }
+  }
+
+  function injectSuggestions(newSuggestions) {
+    //suggestions = suggestions.concat(newSuggestions);
+    suggestions = newSuggestions;
+  }
+
+  function injectSnippets(newSnippets) {
+    for (var snippetName in newSnippets) {
+      snippets[snippetName] = newSnippets[snippetName];
+    }
+  }
+
+
+  // Función para manejar el autocompletado de palabras clave
+  function keywordHint(editor) {
+    var cursor = editor.getCursor();
+    var token = editor.getTokenAt(cursor);
+    var word = token.string.toUpperCase();
+
+    var matchingSuggestions = suggestions.filter(function(suggestion) {
+      return suggestion.startsWith(word);
+    });
+
+    return {
+      list: matchingSuggestions,
+      from: CodeMirror.Pos(cursor.line, token.start),
+      to: CodeMirror.Pos(cursor.line, token.end)
+    };
+  }
+
+  // Función para manejar el autocompletado de snippets
+  // Función para manejar el autocompletado de snippets
+  function snippetHint(editor) {
+    var cursor = editor.getCursor();
+    var token = editor.getTokenAt(cursor);
+    var word = token.string.toUpperCase(); // La palabra que se está escribiendo
+
+    // Filtrar los snippets cuyos nombres comiencen con la palabra escrita
+    var matchingSnippets = Object.keys(snippets).filter(function(name) {
+      return name.toUpperCase().startsWith(word);
+    });
+
+    // Crear una lista de sugerencias que incluye el nombre y el código de cada snippet
+    var snippetSuggestions = matchingSnippets.map(function(name) {
+      return {
+        text: snippets[name], // Este es el texto que se insertará en el editor cuando se seleccione la sugerencia
+        snippetCode: snippets[name], // El código del snippet
+        displayText: name // Este es el texto que se mostrará en la lista de sugerencias
+      };
+    });
+
+    return {
+      list: snippetSuggestions,
+      from: CodeMirror.Pos(cursor.line, token.start),
+      to: CodeMirror.Pos(cursor.line, token.end)
+    };
+  }
+
+
+  // Función principal para manejar el autocompletado
+  function plsqlHint(editor, options) {
+    // Si se presionó CTRL+SPACE, utiliza la función de snippet
+    if (options && options.customCtrlSpace) {
+      return snippetHint(editor);
+    }
+    // De lo contrario, utiliza la función de palabras clave
+    return keywordHint(editor);
+  }
+
+  function getTableHints(editor) {
+    console.log(editor);
+    var cursor = editor.getCursor();
+    var token = editor.getTokenAt(cursor);
+    var word = token.string.trim().toUpperCase();
+    console.log("getTableHints" + word);
+
+    if (word === "") {
+      // Obtener el token antes del espacio
+      token = editor.getTokenAt(CodeMirror.Pos(cursor.line, token.start - 1));
+      word = token.string.trim().toUpperCase();
+      console.log(word);
+
+      if (word === "FROM") {
+        return {
+          list: Object.keys(tables),
+          from: CodeMirror.Pos(cursor.line, token.end + 1),
+          to: CodeMirror.Pos(cursor.line, token.end + 1)
+        };
+      }
+    }else if (word === ".") {
+      return null;
+    }else{
+      var tableNames = Object.keys(tables);
+
+      var matchingSuggestions = tableNames.filter(function(suggestion) {
+        return suggestion.toUpperCase().includes(word.toUpperCase());
+      });
+
+      return {
+        list: matchingSuggestions,
+        from: CodeMirror.Pos(cursor.line, token.start),
+        to: CodeMirror.Pos(cursor.line, token.end)
+      };
+    }
+    return null;
+  }
+
+
+  function getColumnHints(editor) {
+    console.log("getColumnHints");
+    var cursor = editor.getCursor();
+    var token = editor.getTokenAt(cursor);
+    console.log(token);
+    if (token.string === ".") {
+      var line = editor.getLine(cursor.line);
+      var word = line.slice(Math.max(line.lastIndexOf(" "), line.lastIndexOf("(")) + 1, token.start);
+        console.log("prev word: "+word);
+      var columns = tables[word.toUpperCase()];
+      if (columns) {
+        return {
+          list: columns,
+          from: CodeMirror.Pos(cursor.line, token.end),
+          to: CodeMirror.Pos(cursor.line, token.end)
+        };
+      }
+    }
+    return null;
+  }
+
+  function dbHint(editor) {
+    var tableHints = getTableHints(editor);
+    if (tableHints) {
+      return tableHints;
+    }
+
+    var columnHints = getColumnHints(editor);
+    if (columnHints) {
+      return columnHints;
+    }
+
+    console.log("No hints");
+    return getTableHints(editor);
+  }
+
+  // Inicializar CodeMirror con el modo SQL
+  var editor = CodeMirror(document.getElementById('editor-container'), {
+    lineNumbers: true,
+    mode: "text/x-sql",
+    extraKeys: {
+      "Ctrl-1": function(cm) {
+        cm.showHint({
+          hint: dbHint
+        });
+      },
+      "Ctrl-Space": function(cm) {
+        cm.showHint({
+          hint: plsqlHint,
+          customCtrlSpace: true, // Indica que se presionó CTRL+SPACE
+          completeSingle: false
+        });
+      }
+    }
+  });
+  editor.setSize("100%", "100%");
+
+  // Mostrar sugerencias automáticamente mientras se escribe
+  editor.on('inputRead', function(editorInstance, changeObj) {
+    var token = editorInstance.getTokenAt(editorInstance.getCursor());
+    var word = token.string.trim().toUpperCase();
+
+    if (word.length > 0 && !/\s/.test(word) && suggestions.some(s => s.startsWith(word))) {
+      editorInstance.showHint({ hint: plsqlHint, completeSingle: false });
+    }
+    // Sugerencia de nombres de tablas
+    var tableNames = Object.keys(tables);
+    console.log(tableNames);
+    if (word.length > 0 && tableNames.some(tableName => tableName.toUpperCase().includes(word.toUpperCase()))) {
+      console.log("table hint");
+      editorInstance.showHint({ hint: dbHint, completeSingle: false });
+    }
+    if (token.string === ".") {
+      editorInstance.showHint({ hint: dbHint });
+    }
+  });
+
+  // Manejar la selección de un snippet
+  /*editor.on('pick', function(editorInstance, selectedObject) {
+    console.log(selectedObject);
+    var snippetCode = selectedObject.snippetCode; // Obtener el código del snippet seleccionado
+    if (snippetCode) {
+      editorInstance.replaceRange(snippetCode, editorInstance.getCursor()); // Insertar el código del snippet en el editor
+    }
+  });
+
+  editor.on('hintSelect', function(cm, item, element) {
+    console.log(item);
+    if (item.snippetCode) {
+      setTimeout(function() {
+        cm.replaceRange(item.snippetCode, cm.getCursor());
+      }, 10);
+    }
+  });*/
+</script>
+</body>
+</html>
